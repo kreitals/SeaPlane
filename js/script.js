@@ -11,6 +11,8 @@ var Colors = {
 
 //set initial mouse position
 var mousePos={x:0, y:0};
+var worldRotationSpeed = 0.001;
+var skyRotationSpeed = 0.01;
 
 window.addEventListener('load', init, false);
 
@@ -224,7 +226,7 @@ Sea.prototype.moveWaves = function (){
 	// unless we add this line
 	this.mesh.geometry.verticesNeedUpdate=true;
 
-	sea.mesh.rotation.z += .005;
+	//sea.mesh.rotation.z += .005;
 }
 
 // Instantiate the sea and add it to the scene:
@@ -547,8 +549,8 @@ renderer.render(scene, camera);
 function loop(){
 	// Rotate the propeller, the sea and the sky
 //	airplane.propeller.rotation.x += 0.3;
-	sea.mesh.rotation.z += 0.001;
-	sky.mesh.rotation.z += 0.01;
+	sea.mesh.rotation.z += worldRotationSpeed;
+	sky.mesh.rotation.z += skyRotationSpeed;
     
     updatePlane();
     
@@ -583,6 +585,18 @@ function handleMouseMove(event) {
 function updatePlane(){
 	var targetY = normalize(mousePos.y,-0.75,0.75,9, 175);
 	var targetX = normalize(mousePos.x,-0.75,0.75,-100, 100);
+    
+    var normalizeSlowdown = targetY;
+    
+    if (normalizeSlowdown <= 35) {
+        normalizeSlowdown = 35;
+    }
+    
+    //make the rotation of the world and sky dynamic based on where the plane is located on the screen.
+    // Slower when its landing and faster when its at full altitude.
+    worldRotationSpeed = (normalizeSlowdown/2)/9000;
+    skyRotationSpeed = (normalizeSlowdown/2)/6000;
+    
 	
 	// Move the plane at each frame by adding a fraction of the remaining distance
 	airplane.mesh.position.y += (targetY-airplane.mesh.position.y)*0.1;
