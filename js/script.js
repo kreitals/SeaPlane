@@ -7,12 +7,16 @@ var Colors = {
 	brownDark:0x23190f,
 	lightBlue:0x68c3c0,
     darkBlue: 0x0B5394,
+    brightWhite:0xffffff,
 };
 
 //set initial mouse position
 var mousePos={x:0, y:0};
 var worldRotationSpeed = 0.001;
 var skyRotationSpeed = 0.01;
+var planeObject;
+var washObject;
+var isPlaneWashVisible;
 
 window.addEventListener('load', init, false);
 
@@ -399,7 +403,7 @@ var Pilot = function(){
 	// create the hairs at the back of the head
 	var hairBackGeom = new THREE.BoxGeometry(2,8,10);
 	var hairBack = new THREE.Mesh(hairBackGeom, hairMat);
-	hairBack.position.set(-1,-4,0)
+	hairBack.position.set(-1,-4,0);
 	hairs.add(hairBack);
 	hairs.position.set(-5,5,0);
 
@@ -444,8 +448,76 @@ Pilot.prototype.updateHairs = function(){
 	this.angleHairs += 0.16;
 };
 
+
+var PlaneWash = function() {
+    // Create the planes wash for when its landed
+	var geomPlaneWash = new THREE.BoxGeometry(130,8,45,5,5,5);
+    
+    geomPlaneWash.mergeVertices();
+
+	// get the vertices
+	var l = geomPlaneWash.vertices.length;
+
+	// create an array to store new data associated to each vertex
+	this.waves = [];
+
+	for (var i=0; i<l; i++){
+		// get each vertex
+		var v = geomPlaneWash.vertices[i];
+
+		// store some data associated to it
+		this.waves.push({y:v.y,
+										 x:v.x,
+										 z:v.z,
+										 // a random angle
+										 ang:Math.random()*Math.PI*2,
+										 // a random distance
+										 amp:5 + Math.random()*15,
+										 // a random speed between 0.016 and 0.048 radians / frame
+										 speed:0.016 + Math.random()*0.032
+										});
+	}
+    
+	var matPlaneWash = new THREE.MeshPhongMaterial({color:Colors.brightWhite,
+                                                    transparent:true,
+		                                            opacity:0.5, 
+                                                    shading:THREE.FlatShading});
+	this.mesh = new THREE.Mesh(geomPlaneWash, matPlaneWash);
+	//this.mesh.castShadow = true;
+	this.mesh.receiveShadow = true;
+	//this.mesh.add(planeWash);
+};
+
+PlaneWash.prototype.animateWash = function(){
+    
+    var verts = this.mesh.geometry.vertices;
+    var l = verts.length;
+    
+    for (var i=0; i<l; i++){
+		var v = verts[i];
+		
+		// get the data associated to it
+		var vprops = this.waves[i];
+		
+		// update the position of the vertex
+		v.x = vprops.x + Math.cos(vprops.ang)*vprops.amp;
+		v.y = vprops.y + Math.sin(vprops.ang)*vprops.amp;
+
+		// increment the angle for the next frame
+		vprops.ang += vprops.speed;
+
+	}
+
+	// Tell the renderer that the geometry of the sea has changed.
+	// In fact, in order to maintain the best level of performance, 
+	// three.js caches the geometries and ignores any changes
+	// unless we add this line
+	this.mesh.geometry.verticesNeedUpdate=true;
+    
+};
+
 var AirPlane = function() {
-	
+
 	this.mesh = new THREE.Object3D();
     
     // Create the cabin
@@ -532,6 +604,15 @@ var AirPlane = function() {
     this.pilot = new Pilot();
     this.pilot.mesh.position.set(-10,27,0);
     this.mesh.add(this.pilot.mesh);
+    
+    this.planeWash = new PlaneWash();
+    //planeWash.position.set(0, -45, 15);
+    this.planeWash.mesh.name = "planeWash";
+    this.planeWash.name = "planeWash";
+    this.planeWash.id = "planeWash";
+    this.planeWash.mesh.position.set(-5, -38, 0);
+    this.mesh.add(this.planeWash.mesh);
+    this.planeWash.mesh.visible = false;
 };
 
 var airplane;
@@ -540,11 +621,22 @@ function createPlane(){
 	airplane = new AirPlane();
 	airplane.mesh.scale.set(0.25,0.25,0.25);
 	airplane.mesh.position.y = 100;
+    airplane.mesh.name = "airplane";
 	scene.add(airplane.mesh);
+    planeObject = scene.getObjectByName("airplane", true);
+    washObject = planeObject.getObjectByName("planeWash", true);
 }
 
-//render the scene
-renderer.render(scene, camera);
+function createPlaneWash(){
+    washObject.visible = true;
+    isPlaneWashVisible = true;
+}
+
+function removePlaneWash(){
+    washObject.visible = false;
+    isPlaneWashVisible = false;
+    renderer.render(scene, camera);
+}
 
 function loop(){
 	// Rotate the propeller, the sea and the sky
@@ -555,6 +647,7 @@ function loop(){
     updatePlane();
     
     airplane.pilot.updateHairs();
+    airplane.planeWash.animateWash();
     sea.moveWaves();
 
 	// render the scene
@@ -583,7 +676,7 @@ function handleMouseMove(event) {
 }
 
 function updatePlane(){
-	var targetY = normalize(mousePos.y,-0.75,0.75,9, 175);
+	var targetY = normalize(mousePos.y,-0.75,0.75,10, 175);
 	var targetX = normalize(mousePos.x,-0.75,0.75,-100, 100);
     
     var normalizeSlowdown = targetY;
@@ -606,6 +699,12 @@ function updatePlane(){
 	airplane.mesh.rotation.x = (airplane.mesh.position.y-targetY)*0.0064;
 
 	airplane.propeller.rotation.x += 0.3;
+    
+    if (airplane.mesh.position.y < 15 && isPlaneWashVisible !== true) {
+        createPlaneWash();
+    } else if (airplane.mesh.position.y > 15 && isPlaneWashVisible === true) {
+       removePlaneWash();
+    }
 }
 
 function normalize(v,vmin,vmax,tmin, tmax){
